@@ -24,6 +24,7 @@ export default function MarketsPage() {
   const [size, setSize] = useState(10);
   const [msg, setMsg] = useState<{ text: string; ok: boolean } | null>(null);
   const [loading, setLoading] = useState(true);
+  const [degraded, setDegraded] = useState(false);
   const router = useRouter();
   const seq = useRef(0);
 
@@ -38,8 +39,13 @@ export default function MarketsPage() {
         const data = await res.json();
         // Ignore stale responses from superseded requests
         if (!cancelled && mySeq === seq.current) {
+          if (!res.ok) {
+            setDegraded(true); // upstream outage — keep last data
+            return;
+          }
           setMarkets(data.markets);
           setTotals({ totalOpen: data.totalOpen, totalMatching: data.totalMatching });
+          setDegraded(Boolean(data.stale));
           setLoading(false);
         }
       } catch {
@@ -109,6 +115,12 @@ export default function MarketsPage() {
         </span>
       </div>
 
+      {degraded && (
+        <div className="mb-4 rounded bg-amber-900/50 px-3 py-2 text-sm text-amber-300">
+          Upstream Onyx API is degraded — showing last-known prices. Orders may be rejected
+          until live pricing recovers.
+        </div>
+      )}
       {msg && (
         <div
           className={`mb-4 rounded px-3 py-2 text-sm ${msg.ok ? "bg-emerald-900/50 text-emerald-300" : "bg-red-900/50 text-red-300"}`}

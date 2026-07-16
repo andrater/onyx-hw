@@ -8,7 +8,16 @@ export async function GET(req: Request) {
   const q = (searchParams.get("q") ?? "").toLowerCase().trim();
   const pricedOnly = searchParams.get("priced") !== "0";
 
-  let markets = await fetchAllMarkets();
+  let result;
+  try {
+    result = await fetchAllMarkets();
+  } catch {
+    return NextResponse.json(
+      { error: "Upstream markets API is unavailable" },
+      { status: 503 }
+    );
+  }
+  let markets = result.markets;
   const totalOpen = markets.length;
   if (pricedOnly) markets = markets.filter((m) => m.yes_price != null);
   if (q) {
@@ -20,6 +29,7 @@ export async function GET(req: Request) {
   return NextResponse.json({
     totalOpen,
     totalMatching,
+    stale: result.stale,
     markets: markets.slice(0, MAX_RESULTS),
   });
 }
