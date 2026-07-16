@@ -40,6 +40,7 @@ export default function MarketsPage() {
   const [msg, setMsg] = useState<{ text: string; ok: boolean } | null>(null);
   const [loading, setLoading] = useState(true);
   const [degraded, setDegraded] = useState(false);
+  const [staleAgeMs, setStaleAgeMs] = useState(0);
   const router = useRouter();
   const seq = useRef(0);
 
@@ -72,6 +73,7 @@ export default function MarketsPage() {
           setLeagues(data.leagues ?? []);
           setTotals({ totalOpen: data.totalOpen, totalMatching: data.totalMatching });
           setDegraded(Boolean(data.stale));
+          setStaleAgeMs(data.ageMs ?? 0);
           setLoading(false);
         }
       } catch {
@@ -127,12 +129,12 @@ export default function MarketsPage() {
           value={qInput}
           onChange={(e) => setQInput(e.target.value)}
           placeholder="Search markets… (e.g. mets total)"
-          className="w-72 rounded border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm outline-none focus:border-zinc-500"
+          className="w-72 rounded border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-zinc-100 placeholder-zinc-500 outline-none focus:border-zinc-500"
         />
         <select
           value={league}
           onChange={(e) => setLeague(e.target.value)}
-          className="rounded border border-zinc-700 bg-zinc-800 px-2 py-2 text-sm"
+          className="rounded border border-zinc-700 bg-zinc-800 px-2 py-2 text-sm text-zinc-100"
         >
           <option value="">All leagues</option>
           {leagues.map((l) => (
@@ -175,8 +177,9 @@ export default function MarketsPage() {
 
       {degraded && (
         <div className="mb-4 rounded bg-amber-900/50 px-3 py-2 text-sm text-amber-300">
-          Upstream Onyx API is degraded — showing last-known prices. Orders may be rejected
-          until live pricing recovers.
+          ⚠ STALE DATA — the live Onyx API is unreachable. Prices shown are from the last
+          successful fetch{staleAgeMs > 0 ? ` (${Math.round(staleAgeMs / 60000)}m ago)` : ""}.
+          Orders may be rejected until live pricing recovers.
         </div>
       )}
       {msg && (

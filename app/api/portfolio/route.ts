@@ -24,15 +24,25 @@ export async function GET() {
 
   const symbols = [...new Set(positions.map((p) => p.symbol))];
   const { client } = await getPredictions();
-  const prices = await client.getPrices(symbols).catch(
-    () => ({}) as Awaited<ReturnType<typeof client.getPrices>>
-  );
+  let pricesLive = true;
+  const prices = await client.getPrices(symbols).catch(() => {
+    pricesLive = false;
+    return {} as Awaited<ReturnType<typeof client.getPrices>>;
+  });
   // For symbols the live price feed can't cover (upstream outage), fall back
   // to the last-known-good snapshot price so P&L stays visible.
   let snapshotPrices = new Map<string, number | null>();
+  let stale = false;
+  let ageMs = 0;
   if (symbols.some((s) => prices[s]?.last_price == null)) {
-    const { markets } = await client.getMarkets().catch(() => ({ markets: [] }));
-    snapshotPrices = new Map(markets.map((m) => [m.symbol, m.yes_price]));
+    const list = await client
+      .getMarkets()
+      .catch(() => ({ markets: [], stale: !pricesLive, ageMs: 0 }));
+    snapshotPrices = new Map(list.markets.map((m) => [m.symbol, m.yes_price]));
+    // Valuations are stale only if we actually needed the fallback AND the
+    // fallback itself is a cached snapshot (or everything upstream failed).
+    stale = list.stale || (!pricesLive && list.markets.length === 0);
+    ageMs = list.ageMs;
   }
 
   const enriched = positions.map((p) => {
@@ -49,5 +59,5 @@ export async function GET() {
     };
   });
 
-  return NextResponse.json({ positions: enriched });
+  return NextResponse.json({ positions: enriched, stale, ageMs });
 }

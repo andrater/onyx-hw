@@ -43,6 +43,8 @@ export default function PortfolioPage() {
   const [positions, setPositions] = useState<Position[] | null>(null);
   const [orders, setOrders] = useState<Order[]>([]);
   const [unauthed, setUnauthed] = useState(false);
+  const [stale, setStale] = useState(false);
+  const [staleAgeMs, setStaleAgeMs] = useState(0);
 
   useEffect(() => {
     async function load() {
@@ -56,6 +58,8 @@ export default function PortfolioPage() {
         const o = await oRes.json();
         setPositions(p.positions);
         setOrders(o.orders);
+        setStale(Boolean(p.stale));
+        setStaleAgeMs(p.ageMs ?? 0);
       } catch {
         /* keep last data on transient failure */
       }
@@ -84,6 +88,12 @@ export default function PortfolioPage() {
 
   return (
     <div className="flex flex-col gap-8">
+      {stale && (
+        <div className="rounded bg-amber-900/50 px-3 py-2 text-sm text-amber-300">
+          ⚠ STALE DATA — the live Onyx API is unreachable. Position values and P&L are based
+          on the last known prices{staleAgeMs > 0 ? ` (${Math.round(staleAgeMs / 60000)}m ago)` : ""}.
+        </div>
+      )}
       <section>
         <div className="mb-3 flex items-baseline gap-4">
           <h2 className="text-lg font-semibold">Positions</h2>

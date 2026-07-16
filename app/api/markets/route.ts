@@ -56,6 +56,7 @@ export async function GET(req: Request) {
     totalMatching,
     leagues,
     stale: result.stale,
+    ageMs: result.ageMs,
     source,
     markets: markets.slice(0, MAX_RESULTS),
   });
