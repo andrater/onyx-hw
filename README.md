@@ -92,5 +92,5 @@ worth calling out:
   between quote display and order submission (client sends the price it saw).
 - **Auth hardening** — rate-limit login, CSRF token (currently mitigated by
   `SameSite=Lax`), email verification.
-- **UI** — group markets by event, price-change flashes, position detail pages,
-  pagination past the 300-row cap.
+- **UI** — price-change flashes, position detail pages, pagination past the
+  300-row cap.
