@@ -146,7 +146,7 @@ export default function MarketsPage() {
         <select
           value={sort}
           onChange={(e) => setSort(e.target.value)}
-          className="rounded border border-zinc-700 bg-zinc-800 px-2 py-2 text-sm"
+          className="rounded border border-zinc-700 bg-zinc-800 px-2 py-2 text-sm text-zinc-100"
         >
           <option value="name">Sort: name</option>
           <option value="price">Sort: YES price</option>
@@ -167,7 +167,7 @@ export default function MarketsPage() {
             min={1}
             value={size}
             onChange={(e) => setSize(Math.max(1, Math.floor(Number(e.target.value) || 1)))}
-            className="w-20 rounded border border-zinc-700 bg-zinc-800 px-2 py-1 text-sm"
+            className="w-20 rounded border border-zinc-700 bg-zinc-800 px-2 py-1 text-sm text-zinc-100"
           />
         </label>
         <span className="text-xs text-zinc-500">
@@ -253,12 +253,8 @@ function GroupRows({
               <div className="truncate">{label}</div>
               <div className="truncate font-mono text-xs text-zinc-500">{m.symbol}</div>
             </td>
-            <td className="py-2 pr-4 text-right font-mono">
-              {yes != null ? centsPrice(yes) : "—"}
-            </td>
-            <td className="py-2 pr-4 text-right font-mono">
-              {yes != null ? centsPrice(100 - yes) : "—"}
-            </td>
+            <PriceCell cents={yes} />
+            <PriceCell cents={yes != null ? 100 - yes : null} />
             <td className="py-2">
               {yes != null ? (
                 <div className="flex gap-2">
@@ -283,5 +279,34 @@ function GroupRows({
         );
       })}
     </>
+  );
+}
+
+// A price cell that briefly flashes when its value changes on a poll — green
+// on a tick up, red on a tick down — so live updates are visible at a glance.
+// The flash is driven by the Web Animations API (keyed off value changes) so
+// each update restarts a fresh fade-out, with no lingering highlight.
+function PriceCell({ cents }: { cents: number | null }) {
+  const ref = useRef<HTMLTableCellElement>(null);
+  const prev = useRef<number | null>(cents);
+
+  useEffect(() => {
+    if (cents != null && prev.current != null && cents !== prev.current) {
+      const up = cents > prev.current;
+      ref.current?.animate(
+        [
+          { backgroundColor: up ? "rgba(16,185,129,0.35)" : "rgba(244,63,94,0.35)" },
+          { backgroundColor: "transparent" },
+        ],
+        { duration: 800, easing: "ease-out" }
+      );
+    }
+    prev.current = cents;
+  }, [cents]);
+
+  return (
+    <td ref={ref} className="py-2 pr-4 text-right font-mono">
+      {cents != null ? centsPrice(cents) : "—"}
+    </td>
   );
 }
