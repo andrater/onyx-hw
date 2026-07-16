@@ -1,65 +1,177 @@
-import Image from "next/image";
+"use client";
 
-export default function Home() {
+import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
+import { centsPrice } from "@/lib/format";
+
+type Market = {
+  id: string;
+  symbol: string;
+  sport: string;
+  name: string | null;
+  event_name: string | null;
+  status: string;
+  yes_price: number | null;
+};
+
+const POLL_MS = 4000;
+
+export default function MarketsPage() {
+  const [q, setQ] = useState("");
+  const [pricedOnly, setPricedOnly] = useState(true);
+  const [markets, setMarkets] = useState<Market[]>([]);
+  const [totals, setTotals] = useState({ totalOpen: 0, totalMatching: 0 });
+  const [size, setSize] = useState(10);
+  const [msg, setMsg] = useState<{ text: string; ok: boolean } | null>(null);
+  const [loading, setLoading] = useState(true);
+  const router = useRouter();
+  const seq = useRef(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      const mySeq = ++seq.current;
+      try {
+        const res = await fetch(
+          `/api/markets?q=${encodeURIComponent(q)}&priced=${pricedOnly ? 1 : 0}`
+        );
+        const data = await res.json();
+        // Ignore stale responses from superseded requests
+        if (!cancelled && mySeq === seq.current) {
+          setMarkets(data.markets);
+          setTotals({ totalOpen: data.totalOpen, totalMatching: data.totalMatching });
+          setLoading(false);
+        }
+      } catch {
+        /* transient poll failure — keep last data */
+      }
+    }
+    load();
+    const id = setInterval(load, POLL_MS);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, [q, pricedOnly]);
+
+  async function placeOrder(symbol: string, side: "YES" | "NO") {
+    setMsg(null);
+    const res = await fetch("/api/orders", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ symbol, side, size }),
+    });
+    if (res.status === 401) {
+      router.push("/login");
+      return;
+    }
+    const data = await res.json();
+    if (!res.ok) {
+      setMsg({ text: data.error ?? "Order failed", ok: false });
+    } else {
+      setMsg({
+        text: `Filled: ${data.order.size} × ${side} @ ${centsPrice(data.order.fillPriceCents)} on "${data.order.marketName}"`,
+        ok: true,
+      });
+      window.dispatchEvent(new Event("balance-refresh"));
+    }
+  }
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
+    <div>
+      <div className="mb-4 flex flex-wrap items-center gap-4">
+        <input
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder="Search markets…"
+          className="w-72 rounded border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm outline-none focus:border-zinc-500"
         />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+        <label className="flex items-center gap-2 text-sm text-zinc-400">
+          <input
+            type="checkbox"
+            checked={pricedOnly}
+            onChange={(e) => setPricedOnly(e.target.checked)}
+          />
+          Priced only (tradable)
+        </label>
+        <label className="flex items-center gap-2 text-sm text-zinc-400">
+          Contracts:
+          <input
+            type="number"
+            min={1}
+            value={size}
+            onChange={(e) => setSize(Math.max(1, Math.floor(Number(e.target.value) || 1)))}
+            className="w-20 rounded border border-zinc-700 bg-zinc-800 px-2 py-1 text-sm"
+          />
+        </label>
+        <span className="text-xs text-zinc-500">
+          {totals.totalMatching} matching / {totals.totalOpen} open · live, refreshes every 4s
+        </span>
+      </div>
+
+      {msg && (
+        <div
+          className={`mb-4 rounded px-3 py-2 text-sm ${msg.ok ? "bg-emerald-900/50 text-emerald-300" : "bg-red-900/50 text-red-300"}`}
+        >
+          {msg.text}
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
+      )}
+
+      {loading ? (
+        <p className="text-zinc-400">Loading markets…</p>
+      ) : (
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-zinc-700 text-left text-zinc-400">
+              <th className="py-2 pr-4">Market</th>
+              <th className="py-2 pr-4">Sport</th>
+              <th className="py-2 pr-4 text-right">YES</th>
+              <th className="py-2 pr-4 text-right">NO</th>
+              <th className="py-2">Trade</th>
+            </tr>
+          </thead>
+          <tbody>
+            {markets.map((m) => {
+              const yes = m.yes_price != null ? Math.round(m.yes_price * 100) : null;
+              return (
+                <tr key={m.id} className="border-b border-zinc-800 hover:bg-zinc-800/50">
+                  <td className="max-w-md py-2 pr-4">
+                    <div className="truncate">{m.name ?? m.symbol}</div>
+                    <div className="truncate font-mono text-xs text-zinc-500">{m.symbol}</div>
+                  </td>
+                  <td className="py-2 pr-4 text-zinc-400">{m.sport}</td>
+                  <td className="py-2 pr-4 text-right font-mono">
+                    {yes != null ? centsPrice(yes) : "—"}
+                  </td>
+                  <td className="py-2 pr-4 text-right font-mono">
+                    {yes != null ? centsPrice(100 - yes) : "—"}
+                  </td>
+                  <td className="py-2">
+                    {yes != null ? (
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => placeOrder(m.symbol, "YES")}
+                          className="rounded bg-emerald-700 px-2 py-1 text-xs font-semibold hover:bg-emerald-600"
+                        >
+                          Buy YES
+                        </button>
+                        <button
+                          onClick={() => placeOrder(m.symbol, "NO")}
+                          className="rounded bg-rose-700 px-2 py-1 text-xs font-semibold hover:bg-rose-600"
+                        >
+                          Buy NO
+                        </button>
+                      </div>
+                    ) : (
+                      <span className="text-xs text-zinc-600">no price</span>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      )}
     </div>
   );
 }
