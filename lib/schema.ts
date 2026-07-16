@@ -1,5 +1,5 @@
 import { pgTable, uuid, text, integer, timestamp, jsonb } from "drizzle-orm/pg-core";
-import type { OnyxMarket } from "./onyx";
+import type { Market } from "./predictions/types";
 
 // All money is integer cents to avoid float drift. Contract prices are 1-99 cents.
 export const users = pgTable("users", {
@@ -15,7 +15,7 @@ export const users = pgTable("users", {
 // cold starts, and upstream outages.
 export const marketSnapshots = pgTable("market_snapshots", {
   id: integer("id").primaryKey(),
-  markets: jsonb("markets").$type<OnyxMarket[]>().notNull(),
+  markets: jsonb("markets").$type<Market[]>().notNull(),
   fetchedAt: timestamp("fetched_at", { withTimezone: true }).notNull(),
 });
 

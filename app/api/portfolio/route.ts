@@ -3,7 +3,7 @@ import { eq, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { orders } from "@/lib/schema";
 import { requireUserId } from "@/lib/session";
-import { fetchAllMarkets, fetchPricesBatch } from "@/lib/onyx";
+import { predictions } from "@/lib/predictions";
 
 export async function GET() {
   const userId = await requireUserId();
@@ -23,14 +23,14 @@ export async function GET() {
     .groupBy(orders.symbol, orders.side);
 
   const symbols = [...new Set(positions.map((p) => p.symbol))];
-  const prices = await fetchPricesBatch(symbols).catch(
-    () => ({}) as Awaited<ReturnType<typeof fetchPricesBatch>>
+  const prices = await predictions.getPrices(symbols).catch(
+    () => ({}) as Awaited<ReturnType<typeof predictions.getPrices>>
   );
   // For symbols the live price feed can't cover (upstream outage), fall back
   // to the last-known-good snapshot price so P&L stays visible.
   let snapshotPrices = new Map<string, number | null>();
   if (symbols.some((s) => prices[s]?.last_price == null)) {
-    const { markets } = await fetchAllMarkets().catch(() => ({ markets: [] }));
+    const { markets } = await predictions.getMarkets().catch(() => ({ markets: [] }));
     snapshotPrices = new Map(markets.map((m) => [m.symbol, m.yes_price]));
   }
 

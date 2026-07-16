@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { fetchAllMarkets } from "@/lib/onyx";
+import { predictions } from "@/lib/predictions";
 
 const MAX_RESULTS = 300;
 
@@ -10,7 +10,7 @@ export async function GET(req: Request) {
 
   let result;
   try {
-    result = await fetchAllMarkets();
+    result = await predictions.getMarkets();
   } catch {
     return NextResponse.json(
       { error: "Upstream markets API is unavailable" },

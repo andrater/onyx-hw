@@ -3,7 +3,7 @@ import { and, desc, eq, gte, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { orders, users } from "@/lib/schema";
 import { requireUserId } from "@/lib/session";
-import { getMarketWithLivePrice } from "@/lib/onyx";
+import { getMarketWithLivePrice } from "@/lib/predictions";
 
 export async function GET() {
   const userId = await requireUserId();
