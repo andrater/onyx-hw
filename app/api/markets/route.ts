@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { predictions } from "@/lib/predictions";
+import { getPredictions } from "@/lib/predictions";
 
 const MAX_RESULTS = 300;
 
@@ -8,9 +8,10 @@ export async function GET(req: Request) {
   const q = (searchParams.get("q") ?? "").toLowerCase().trim();
   const pricedOnly = searchParams.get("priced") !== "0";
 
+  const { client, source } = await getPredictions();
   let result;
   try {
-    result = await predictions.getMarkets();
+    result = await client.getMarkets();
   } catch {
     return NextResponse.json(
       { error: "Upstream markets API is unavailable" },
@@ -30,6 +31,7 @@ export async function GET(req: Request) {
     totalOpen,
     totalMatching,
     stale: result.stale,
+    source,
     markets: markets.slice(0, MAX_RESULTS),
   });
 }

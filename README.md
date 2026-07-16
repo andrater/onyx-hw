@@ -18,10 +18,13 @@ npm run db:push              # create tables (drizzle-kit)
 npm run dev                  # http://localhost:3000
 ```
 
-`PREDICTIONS_API=mock` runs the app with zero upstream dependency: 5 real
-markets captured from the Onyx dev API, with prices that random-walk ±2¢ every
-3s — enough to exercise polling, fills, and P&L. This exists because the Onyx
-dev API went down mid-build (see "Upstream quirks").
+**Mock mode** runs the app with zero upstream dependency: a real 1000-market
+capture from the Onyx dev API (`data/markets-snapshot.json`) whose priced
+markets random-walk ±2¢ every 3s — enough to exercise search, polling, fills,
+and P&L. Toggle it per-browser with the **MOCK DATA / LIVE API** button in the
+nav (a cookie the server reads per request), or set the default with
+`PREDICTIONS_API=mock`. This exists because the Onyx dev API went down
+mid-build (see "Upstream quirks").
 
 ## Architecture
 
@@ -32,10 +35,12 @@ dev API went down mid-build (see "Upstream quirks").
   (email/password, per-user state) don't need more.
 - **`PredictionsApiClient` interface** (`lib/predictions/`): the app is
   written against `getMarkets()` / `getPrices(symbols)`, with two
-  implementations — the real Onyx client and the ticking mock — selected by
-  env var. This is the right seam regardless of the outage that motivated it:
-  it makes the app testable offline and makes swapping/adding data providers
-  trivial.
+  implementations — the real Onyx client and the ticking mock — selected
+  per-request (cookie from the UI toggle, falling back to env). This is the
+  right seam regardless of the outage that motivated it: it makes the app
+  testable offline and makes swapping/adding data providers trivial. Orders
+  placed in mock mode fill at the mock's current ticked price through the
+  exact same fill path as the real API.
 - **Data model: two tables + a cache.** `users` (email, bcrypt hash, balance
   in integer cents) and `orders` — an immutable log of fills. There is no
   `positions` table: positions and P&L are *derived* by aggregating orders per

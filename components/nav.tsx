@@ -9,13 +9,22 @@ type Me = { id: string; email: string; balanceCents: number } | null;
 
 export default function Nav() {
   const [me, setMe] = useState<Me>(null);
+  const [source, setSource] = useState<"onyx" | "mock" | null>(null);
   const router = useRouter();
 
   const refresh = useCallback(async () => {
     const res = await fetch("/api/me");
     const data = await res.json();
     setMe(data.user);
+    setSource(data.source);
   }, []);
+
+  function toggleSource() {
+    const next = source === "mock" ? "onyx" : "mock";
+    document.cookie = `data_source=${next}; path=/; max-age=31536000; samesite=lax`;
+    setSource(next);
+    window.dispatchEvent(new Event("balance-refresh")); // nudge pollers
+  }
 
   useEffect(() => {
     refresh();
@@ -45,6 +54,19 @@ export default function Nav() {
         Portfolio
       </Link>
       <div className="ml-auto flex items-center gap-4">
+        {source && (
+          <button
+            onClick={toggleSource}
+            title="Toggle between the live Onyx API and offline mock data with ticking prices"
+            className={`rounded px-2 py-1 text-xs font-semibold ${
+              source === "mock"
+                ? "bg-amber-800 text-amber-200"
+                : "bg-zinc-800 text-zinc-400"
+            }`}
+          >
+            {source === "mock" ? "MOCK DATA" : "LIVE API"}
+          </button>
+        )}
         {me ? (
           <>
             <span className="rounded bg-zinc-800 px-2 py-1 font-mono text-emerald-400">
