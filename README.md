@@ -18,13 +18,30 @@ npm run db:push              # create tables (drizzle-kit)
 npm run dev                  # http://localhost:3000
 ```
 
-**Mock mode** runs the app with zero upstream dependency: a real 1000-market
-capture from the Onyx dev API (`data/markets-snapshot.json`) whose priced
-markets random-walk ±2¢ every 3s — enough to exercise search, polling, fills,
-and P&L. Toggle it per-browser with the **MOCK DATA / LIVE API** button in the
-nav (a cookie the server reads per request), or set the default with
-`PREDICTIONS_API=mock`. This exists because the Onyx dev API went down
-mid-build (see "Upstream quirks").
+**Mock mode** runs the app with zero upstream dependency — see
+[The mock data source](#the-mock-data-source-and-why-it-exists). Toggle it
+per-browser with the **MOCK DATA / LIVE API** button in the nav, or set the
+default with `PREDICTIONS_API=mock`.
+
+## Requirements → implementation
+
+- **Auth** — own `users` table (bcrypt hash, per-user balance), iron-session
+  signed cookie; fully independent of the Onyx API's auth (its JWT endpoints
+  are never called). Each user has their own balance, order history, and
+  positions, all scoped by session user id at the API layer.
+- **Live market data** — all open markets pulled from the paginated upstream
+  `GET /markets`; multi-word AND search, league filter (parsed from the
+  symbol, since upstream's `sport` field is always "OTHER"), sort by
+  name/price/expiry, rows grouped by event. Prices update live via 4s polling
+  of a 3s-cached proxy route.
+- **Paper orders** — authenticated users buy YES or NO on any priced market;
+  fills are instant at the current upstream price for that side (YES at
+  `yes_price`, NO at `1 − yes_price`), fetched fresh at order time. Nothing
+  ever executes against the real API — the app only issues read-only calls
+  upstream; orders, fills, and positions exist solely in our Postgres.
+- **Account state** — $1,000 starting paper balance; positions, fills, and
+  unrealized P&L tracked against the latest upstream price (or the last-known
+  snapshot price during an outage).
 
 ## Architecture
 
@@ -66,6 +83,29 @@ worth calling out:
 - **No stale fills:** if the fresh price fetch fails and our cached market
   list is older than 30s, the order is rejected rather than filled at a price
   we can't trust.
+
+## The mock data source (and why it exists)
+
+About 30 minutes into the build, the Onyx dev API started timing out on every
+endpoint and stayed down for the better part of an hour. Rather than stall,
+the app got the abstraction it should have had anyway: a
+`PredictionsApiClient` interface (`getMarkets()` / `getPrices(symbols)`) with
+two implementations selected per request.
+
+- **`onyx-client`** — the real API, wrapped in the resilience layers described
+  below.
+- **`mock-client`** — backed by `data/markets-snapshot.json`, a real
+  1000-market capture taken from the live API earlier in the session. The
+  ~146 markets that had live prices random-walk ±2¢ every 3 seconds (lazily,
+  on read — serverless-safe, no timers), so search, filtering, polling, order
+  fills, and P&L are all fully exercisable offline. Orders placed in mock mode
+  go through the exact same fill path and land in the same database — the only
+  difference is where the price came from.
+
+The toggle (nav button → `data_source` cookie, `PREDICTIONS_API` env as the
+default) means the mock isn't just an outage workaround: it's how you develop
+without a network, demo when the dev API is flaky, and — with more time — how
+fill logic gets tested deterministically without mocking HTTP.
 
 ## Upstream quirks discovered (Onyx dev API)
 
