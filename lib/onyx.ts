@@ -34,9 +34,34 @@ export type OnyxPrice = {
 
 const PAGE = 1000;
 const MAX_PAGES = 3;
+// Persist the snapshot to Postgres at most this often.
+const SNAPSHOT_WRITE_INTERVAL_MS = 60_000;
 
-// Last-known-good snapshot, per serverless instance / dev process.
+// Last-known-good snapshot, per serverless instance / dev process. Backed by
+// a single-row Postgres table so it survives restarts and cold starts.
 let lastGood: { at: number; markets: OnyxMarket[] } | null = null;
+let lastSnapshotWrite = 0;
+
+async function persistSnapshot(markets: OnyxMarket[], at: number) {
+  if (at - lastSnapshotWrite < SNAPSHOT_WRITE_INTERVAL_MS) return;
+  lastSnapshotWrite = at;
+  const { db } = await import("./db");
+  const { marketSnapshots } = await import("./schema");
+  await db
+    .insert(marketSnapshots)
+    .values({ id: 1, markets, fetchedAt: new Date(at) })
+    .onConflictDoUpdate({
+      target: marketSnapshots.id,
+      set: { markets, fetchedAt: new Date(at) },
+    });
+}
+
+async function loadSnapshotFromDb(): Promise<{ at: number; markets: OnyxMarket[] } | null> {
+  const { db } = await import("./db");
+  const { marketSnapshots } = await import("./schema");
+  const [row] = await db.select().from(marketSnapshots).limit(1);
+  return row ? { at: row.fetchedAt.getTime(), markets: row.markets } : null;
+}
 
 // Fetch all open markets (paginated upstream, pages fetched in parallel).
 // Cached 3s per page URL so many polling clients don't hammer upstream.
@@ -62,8 +87,13 @@ export async function fetchAllMarkets(): Promise<{
     .filter((r): r is PromiseFulfilledResult<OnyxMarket[]> => r.status === "fulfilled")
     .flatMap((r) => r.value);
   if (markets.length > 0) {
-    lastGood = { at: Date.now(), markets };
+    const at = Date.now();
+    lastGood = { at, markets };
+    persistSnapshot(markets, at).catch(() => {}); // best-effort, off hot path
     return { markets, stale: false, ageMs: 0 };
+  }
+  if (!lastGood) {
+    lastGood = await loadSnapshotFromDb().catch(() => null);
   }
   if (lastGood) {
     return { markets: lastGood.markets, stale: true, ageMs: Date.now() - lastGood.at };
